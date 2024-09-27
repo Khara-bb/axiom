@@ -1,7 +1,7 @@
 {
   "builders": [
     {
-      "type": "hetzner",
+      "type": "hcloud",
       "ssh_username": "root",
       "image_label":  "{{ user `snapshot_name` }}",
       "instance_label": "{{ user `snapshot_name` }}",
