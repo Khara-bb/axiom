@@ -72,10 +72,10 @@ function setuphetzner() {
         echo -e "${Blue}Selected default option 'eu-central'${Color_Off}"
         region="eu-central"
     fi
-    echo -e -n "${Green}Please enter your default size: (Default 'g6-standard-1', press enter) \n>> ${Color_Off}"
+    echo -e -n "${Green}Please enter your default size: (Default 'cx22', press enter) \n>> ${Color_Off}"
     read size
     if [[ "$size" == "" ]]; then
-        echo -e "${Blue}Selected default option 'g6-standard-1'${Color_Off}"
+        echo -e "${Blue}Selected default option 'cx22'${Color_Off}"
         size="cx22"
     fi
 
@@ -96,7 +96,7 @@ function setuphetzner() {
         read appliance_key
     fi
 
-    data="$(echo "{\"do_key\":\"$token\",\"region\":\"$region\",\"provider\":\"hetzner\",\"default_size\":\"$size\",\"appliance_name\":\"$appliance_name\",\"appliance_key\":\"$appliance_key\",\"appliance_url\":\"$appliance_url\", \"email\":\"$email\"}")"
+    data="$(echo "{\"do_key\":\"$token\",\"region\":\"$region\",\"provider\":\"hcloud\",\"default_size\":\"$size\",\"appliance_name\":\"$appliance_name\",\"appliance_key\":\"$appliance_key\",\"appliance_url\":\"$appliance_url\", \"email\":\"$email\"}")"
 
     echo -e "${BGreen}Profile settings below: ${Color_Off}"
     echo $data | jq
