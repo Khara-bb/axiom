@@ -5,34 +5,34 @@ LOG="$AXIOM_PATH/log.txt"
 
 # takes no arguments, outputs JSON object with instances
 instances() {
-	linode-cli linodes list --json
+	hcloud server list -o json
 	#linode-cli linodes list --json | jq '.[] | [.label,.ipv4[],.region,.specs.memory]'
 }
 
 instance_id() {
 	name="$1"
-	instances | jq ".[] | select(.label==\"$name\") | .id"
+	instances | jq ".[] | select(.name==\"$name\") | .id"
 }
 
 # takes one argument, name of instance, returns raw IP address
 instance_ip() {
 	name="$1"
-	instances | jq -r ".[] | select(.label==\"$name\") | .ipv4[0]"
+	instances | jq -r ".[] | select(.name==\"$name\") | .public_net.ipv4.ip"
 }
 
 poweron() {
     instance_name="$1"
-    linode-cli linodes boot $(instance_id $instance_name)
+    hcloud server boot $(instance_id $instance_name)
 }
 
 poweroff() {
     instance_name="$1"
-    linode-cli linodes shutdown $(instance_id $instance_name)
+    hcloud server shutdown $(instance_id $instance_name)
 }
 
 reboot(){
     instance_name="$1"
-    linode-cli linodes reboot $(instance_id $instance_name)
+    hcloud server reboot $(instance_id $instance_name)
 }
 
 instance_ip_cache() {
@@ -57,7 +57,7 @@ instance_menu() {
 
 quick_ip() {
 	data="$1"
-	ip=$(echo $data | jq -r ".[] | select(.label == \"$name\") | .ipv4[0]")
+	ip=$(echo $data | jq -r ".[] | select(.name == \"$name\") | .public_net.ipv4.ip")
 	echo $ip
 }
 
@@ -68,11 +68,11 @@ instance_pretty() {
   #default size from config file
   type="$(jq -r .default_size "$AXIOM_PATH/axiom.json")"
   #monthly price of linode type 
-  price=$(linode-cli linodes type-view $type --json|jq -r '.[].price.monthly')
-  totalPrice=$(( $price * $linodes))
-  header="Instance,Primary Ip,Backend Ip,Region,Memory,Status,\$/M"
-  totals="_,_,_,Instances,$linodes,Total,\$$totalPrice"
-  fields=".[] | [.label,.ipv4[0],.ipv4[1],.region,.specs.memory,.status, \"$price\"]| @csv"
+  price=$(echo $data | jq -r '.[0].server_type.prices[0].price_monthly.net')
+  totalPrice=$(echo "$price $linodes" | awk '{print $1 * $2}')
+  header="Instance,Name,Primary Ip,Region,Memory,Status,\$/M"
+  totals="_,_,_,_,Instances,$linodes,Total,\$$totalPrice"
+  fields=".[] | [.id,.name,.public_net.ipv4.ip,.datacenter.name,.server_type.memory,.status, \"$price\"]| @csv"
   #printing part
   #sort -k1 sorts all data by label/instance/linode name
   (echo "$header" && echo $data|(jq -r "$fields" |sort -k1) && echo "$totals") | sed 's/"//g' | column -t -s, | perl -pe '$_ = "\033[0;37m$_\033[0;34m" if($. % 2)'
@@ -85,15 +85,15 @@ selected_instance() {
 
 get_image_id() {
 	query="$1"
-	images=$(linode-cli images list --json)
-	id=$(echo $images |  jq -r ".[] | select(.label==\"$query\") | .id")
+	images=$(hcloud image list -o json)
+	id=$(echo $images |  jq -r ".[] | select(.description==\"$query\") | .id")
 	echo $id
 }
 
 delete_instance() {
     name="$1"
   	id="$(instance_id "$name")"
-    linode-cli linodes delete "$id"
+    hcloud server delete "$id"
 }
 
 # TBD 
@@ -141,11 +141,11 @@ list_subdomains() {
 }
 # get JSON data for snapshots
 snapshots() {
-	linode-cli images list --json
+	hcloud image list -t snapshot -o json
 }
 # only displays private images 
 get_snapshots() {
-    linode-cli images list --is_public false
+    hcloud image list -t snapshot
 }
 
 delete_record() {
@@ -205,7 +205,7 @@ query_instances() {
 	for var in "$@"; do
 		if [[ "$var" =~ "*" ]]; then
 			var=$(echo "$var" | sed 's/*/.*/g')
-			selected="$selected $(echo $droplets | jq -r '.[].label' | grep "$var")"
+			selected="$selected $(echo $droplets | jq -r '.[].name' | grep "$var")"
 		else
 			if [[ $query ]]; then
 				query="$query\|$var"
@@ -216,7 +216,7 @@ query_instances() {
 	done
 
 	if [[ "$query" ]]; then
-		selected="$selected $(echo $droplets | jq -r '.[].label' | grep -w "$query")"
+		selected="$selected $(echo $droplets | jq -r '.[].name' | grep -w "$query")"
 	else
 		if [[ ! "$selected" ]];	then
 			echo -e "${Red}No instance supplied, use * if you want to delete all instances...${Color_Off}"
@@ -278,7 +278,7 @@ generate_sshconfig() {
         echo -e "axiom will always attempt to SSH into the instances from their private backend network interface. To revert: axiom-ssh --just-generate"
 
     for name in $(echo "$droplets" | jq -r '.[].label'); do
-        ip=$(echo "$droplets" | jq -r ".[] | select(.label==\"$name\") | .ipv4[1]")
+        ip=$(echo "$droplets" | jq -r ".[] | select(.name==\"$name\") | .public_net.ipv4.ip")
         echo -e "Host $name\n\tHostName $ip\n\tUser op\n\tPort 2266\n" >> $sshnew 
      done
 
@@ -291,8 +291,8 @@ generate_sshconfig() {
     # If anything but "private" or "cache" is parsed from the generate_sshconfig in account.json, generate public IPs only
     #
 	else
-        for name in $(echo "$droplets" | jq -r '.[].label'); do
-            ip=$(echo "$droplets" | jq -r ".[] | select(.label==\"$name\") | .ipv4[0]")
+        for name in $(echo "$droplets" | jq -r '.[].name'); do
+            ip=$(echo "$droplets" | jq -r ".[] | select(.name==\"$name\") | .public_net.ipv4.ip")
             echo -e "Host $name\n\tHostName $ip\n\tUser op\n\tPort 2266\n" >> $sshnew
         done
 	mv $sshnew  $AXIOM_PATH/.sshconfig
@@ -308,10 +308,10 @@ create_instance() {
 	name="$1"
 	image_id="$2"
 	size_slug="$3"
-	region="$4"
+	location="$4"
 	boot_script="$5"
 	root_pass="$(jq -r .do_key "$AXIOM_PATH/axiom.json")"
-	linode-cli linodes create  --type "$size_slug" --region "$region" --image "$image_id" --label "$name" --root_pass "$root_pass" --private_ip true 2>&1 >> /dev/null
+	hcloud server create  --name "$name" --type "$size_slug" --location "$location" --image "$image_id"  --label "name=$name" 2>&1 >> /dev/null
 	sleep 260
 }
 

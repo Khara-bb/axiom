@@ -4,6 +4,7 @@
       "type": "hcloud",
       "ssh_username": "root",
       "token": "{{ user `do_key` }}",
+      "snapshot_name": "{{ user `snapshot_name` }}",
       "image": "ubuntu-24.04",
       "location": "nbg1",
   	  "server_type": "cx22"
